@@ -18,7 +18,7 @@ namespace wheel {
 
 using ComponentID = std::type_index;
 using EventID = std::type_index;
-using System = std::function<void()>;
+using SystemID = std::type_index;
 
 class ECS {
     friend class ComponentContainer;
@@ -103,7 +103,38 @@ public:
     template <typename... ComponentTypes>
     auto get_entity_and_components();
 
-    void add_system(const System& system);
+    template <typename SystemType>
+    SystemID get_system_id() {
+        return typeid(SystemType);
+    }
+
+    template <typename SystemType>
+    void add_system();
+
+    template <typename... SystemTypes>
+    void add_systems();
+
+    template <typename SystemType>
+    void del_system();
+
+    template <typename... SystemTypes>
+    void del_systems();
+
+    template <typename SystemType>
+    void pause_system();
+
+    void pause_system(const SystemID& system_id);
+
+    template <typename... SystemType>
+    void pause_systems();
+
+    template <typename SystemType>
+    void resume_system();
+
+    void resume_system(const SystemID& system_id);
+
+    template <typename... SystemType>
+    void resume_systems();
 
     template <typename EventType>
     void add_event(EventType&& event);
@@ -131,9 +162,12 @@ private:
     std::unordered_map<ComponentID, ComponentContainer> component2containers_;
     std::unordered_set<ComponentID> excluded_component_ids_;
 
-    std::vector<System> startup_systems_;
-    std::vector<System> systems_;
-    std::vector<System> shutdown_systems_;
+    struct SystemInfo {
+        std::function<void()> func;
+        bool active{true};
+    };
+    std::vector<SystemID> systems_;
+    std::unordered_map<SystemID, SystemInfo> system_infos_map_;
 
     std::unordered_map<EventID, std::vector<std::any>> current_frame_events_map_, next_frame_events_map_;
 };
@@ -302,6 +336,61 @@ auto ECS::get_entity_and_components() {
             return std::any_cast<ComponentTypes&>(component);
         })
     ...);
+}
+
+template <typename SystemType>
+void ECS::add_system() {
+    SystemID id = typeid(SystemType);
+    system_infos_map_.emplace(id, SystemInfo{
+        .func = [system = SystemType()]() mutable { system(); },
+        .active = true
+    });
+    systems_.emplace_back(id);
+}
+
+template <typename... SystemTypes>
+void ECS::add_systems() {
+    (add_system<SystemTypes>(), ...);
+}
+
+template <typename SystemType>
+void ECS::del_system() {
+    SystemID id = typeid(SystemType);
+    if (system_infos_map_.count(id)) {
+        system_infos_map_.erase(id);
+        systems_.erase(std::remove(systems_.begin(), systems_.end(), id), systems_.end());
+    }
+}
+
+template <typename... SystemTypes>
+void ECS::del_systems() {
+    (del_system<SystemTypes>(), ...);
+}
+
+template <typename SystemType>
+void ECS::pause_system() {
+    SystemID id = typeid(SystemType);
+    if (system_infos_map_.count(id)) {
+        system_infos_map_.at(id).active = false;
+    }
+}
+
+template <typename... SystemType>
+void ECS::pause_systems() {
+    (pause_system<SystemType>(), ...);
+}
+
+template <typename SystemType>
+void ECS::resume_system() {
+    SystemID id = typeid(SystemType);
+    if (system_infos_map_.count(id)) {
+        system_infos_map_.at(id).active = true;
+    }
+}
+
+template <typename... SystemType>
+void ECS::resume_systems() {
+    (resume_system<SystemType>(), ...);
 }
 
 template <typename EventType>

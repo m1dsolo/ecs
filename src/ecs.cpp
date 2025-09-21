@@ -3,8 +3,11 @@
 namespace wheel {
 
 void ECS::update() {
-    for (auto& system : systems_) {
-        system();
+    for (auto system : systems_) {
+        const auto& info = system_infos_map_.at(system);
+        if (info.active) {
+            info.func();
+        }
     }
     std::swap(current_frame_events_map_, next_frame_events_map_);
     next_frame_events_map_.clear();
@@ -35,8 +38,16 @@ void ECS::del_component(Entity entity, ComponentID component_id) {
     entity2components_.at(entity).erase(component_id);
 }
 
-void ECS::add_system(const System& system) {
-    systems_.emplace_back(system);
+void ECS::pause_system(const SystemID& system_id) {
+    if (system_infos_map_.count(system_id)) {
+        system_infos_map_.at(system_id).active = false;
+    }
+}
+
+void ECS::resume_system(const SystemID& system_id) {
+    if (system_infos_map_.count(system_id)) {
+        system_infos_map_.at(system_id).active = true;
+    }
 }
 
 void ECS::clear() {
@@ -53,9 +64,7 @@ void ECS::clear_entities() {
 }
 
 void ECS::clear_systems() {
-    startup_systems_.clear();
     systems_.clear();
-    shutdown_systems_.clear();
 }
 
 void ECS::clear_events() {
