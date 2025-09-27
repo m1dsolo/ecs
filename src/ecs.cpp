@@ -13,6 +13,24 @@ void ECS::update() {
     next_frame_events_map_.clear();
 }
 
+Entity ECS::copy_entity(Entity entity) {
+    if (!has_entity(entity)) {
+        return NullEntity;
+    }
+
+    Entity new_entity = EntityGenerator::generate();
+    EntityGenerator::set_next_entity(std::max(EntityGenerator::next_entity(), new_entity + 1));
+    entity2components_[new_entity] = {};
+
+    const auto& components = entity2components_.at(entity);
+    for (const auto [comp_id, _] : components) {
+        auto component = get_component_(entity, comp_id);
+        add_component_(new_entity, component);
+    }
+
+    return new_entity;
+}
+
 void ECS::del_entity(Entity entity) {
     if (!has_entity(entity)) return;
 
@@ -70,6 +88,15 @@ void ECS::clear_systems() {
 void ECS::clear_events() {
     current_frame_events_map_.clear();
     next_frame_events_map_.clear();
+}
+
+std::any& ECS::get_component_(ComponentID component_id) {
+    return component2containers_.at(component_id).components.at(0);
+}
+
+std::any& ECS::get_component_(Entity entity, ComponentID component_id) {
+    size_t idx = entity2components_.at(entity).at(component_id);
+    return component2containers_.at(component_id).components.at(idx);
 }
 
 }  // namespace wheel
