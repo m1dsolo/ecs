@@ -9,51 +9,40 @@ void ECS::update() {
             info.func();
         }
     }
-    std::swap(current_frame_events_map_, next_frame_events_map_);
-    next_frame_events_map_.clear();
+    std::swap(current_events_map_, next_events_map_);
+    next_events_map_.clear();
 }
 
 Entity ECS::copy_entity(Entity entity) {
-    if (!has_entity(entity)) {
-        return NullEntity;
-    }
+    if (!has_entity(entity)) return NullEntity;
 
-    Entity new_entity = EntityGenerator::generate();
-    EntityGenerator::set_next_entity(std::max(EntityGenerator::next_entity(), new_entity + 1));
-    entity2components_[new_entity] = {};
+    auto new_entity = EntityGenerator::generate();
+    entity_components_[new_entity] = {};
 
-    const auto& components = entity2components_.at(entity);
-    for (const auto [comp_id, _] : components) {
-        auto component = get_component_(entity, comp_id);
-        add_component_(new_entity, component);
+    for (auto cid : entity_components_.at(entity)) {
+        cid2containers_.at(cid)->copy(entity, new_entity);
     }
 
     return new_entity;
 }
 
 void ECS::del_entity(Entity entity) {
-    if (!has_entity(entity)) return;
-
-    for (auto& [component_id, idx] : entity2components_.at(entity)) {
-        component2entities_.at(component_id).del(entity);
-        component2containers_.at(component_id).del(idx);
+    if (!has_entity(entity)) {
+        return;
     }
-    entity2components_.erase(entity);
+
+    for (auto cid : entity_components_.at(entity)) {
+        cid2containers_.at(cid)->remove(entity);
+    }
+    entity_components_.erase(entity);
 }
 
 bool ECS::has_entity(Entity entity) const {
-    return entity2components_.count(entity);
+    return entity_components_.count(entity);
 }
 
 size_t ECS::count_entities() const {
-    return entity2components_.size();
-}
-
-void ECS::del_component(Entity entity, ComponentID component_id) {
-    size_t idx = entity2components_.at(entity).at(component_id);
-    component2entities_.at(component_id).del(entity);
-    component2containers_.at(component_id).del(idx);
-    entity2components_.at(entity).erase(component_id);
+    return entity_components_.size();
 }
 
 void ECS::pause_system(const SystemID& system_id) {
@@ -75,10 +64,9 @@ void ECS::clear() {
 }
 
 void ECS::clear_entities() {
-    entity2components_.clear();
-    component2entities_.clear();
-    component2containers_.clear();
-    EntityGenerator::set_next_entity(wheel::NullEntity + 1);
+    entity_components_.clear();
+    cid2containers_.clear();
+    EntityGenerator::clear();
 }
 
 void ECS::clear_systems() {
@@ -86,17 +74,8 @@ void ECS::clear_systems() {
 }
 
 void ECS::clear_events() {
-    current_frame_events_map_.clear();
-    next_frame_events_map_.clear();
-}
-
-std::any& ECS::get_component_(ComponentID component_id) {
-    return component2containers_.at(component_id).components.at(0);
-}
-
-std::any& ECS::get_component_(Entity entity, ComponentID component_id) {
-    size_t idx = entity2components_.at(entity).at(component_id);
-    return component2containers_.at(component_id).components.at(idx);
+    current_events_map_.clear();
+    next_events_map_.clear();
 }
 
 }  // namespace wheel

@@ -1,34 +1,75 @@
 #pragma once
 
 #include <ecs/entity.hpp>
-
-#include <any>
-#include <vector>
-#include <typeindex>
+#include <ecs/sparse_set.hpp>
 
 namespace wheel {
 
-class ECS;
+// type erasure for component container
+class ComponentContainerInterface {
+public:
+    virtual ~ComponentContainerInterface() = default;
 
-struct ComponentContainer {
-    ComponentContainer(ECS& ecs, std::type_index component_id);
+    virtual void remove(Entity entity) = 0;
 
-    template <typename ComponentType>
-    void add(ComponentType&& component, Entity entity) {
-        components.emplace_back(std::forward<ComponentType>(component));
-        invert_index.emplace_back(std::move(entity));
+    virtual bool has(Entity entity) const = 0;
+
+    virtual size_t size() const = 0;
+
+    virtual void copy(Entity src_entity, Entity dst_entity) = 0;
+};
+
+template <typename ComponentType>
+class ComponentContainer : public ComponentContainerInterface {
+public:
+    void remove(Entity entity) override {
+        if (!entities_.has(entity)) return;
+
+        auto idx = entities_.get_index(entity);
+        entities_.remove(entity);
+
+        if (idx < components_.size() - 1) {
+            components_[idx] = std::move(components_.back());
+        }
+        components_.pop_back();
     }
 
-    bool del(size_t idx);
+    bool has(Entity entity) const override {
+        return entities_.has(entity);
+    }
 
-    auto begin() { return components.begin(); }
-    auto end() { return components.end(); }
-    size_t size() const { return components.size(); }
+    size_t size() const override {
+        return components_.size();
+    }
 
-    std::vector<std::any> components;
-    std::vector<Entity> invert_index;
-    std::type_index component_id;
-    ECS& ecs;
+    void copy(Entity src_entity, Entity dst_entity) override {
+        if (!entities_.has(src_entity)) {
+            return;
+        }
+
+        const ComponentType& src_component = get(src_entity);
+
+        add(dst_entity, src_component);
+    }
+
+    ComponentType& get(Entity entity) {
+        auto idx = entities_.get_index(entity);
+        return components_[idx];
+    }
+
+    ComponentType& get_first() {
+        return components_.front();
+    }
+
+    template <typename T>
+    void add(Entity entity, T&& component) {
+        components_.emplace_back(component);
+        entities_.add(entity);
+    }
+
+private:
+    SparseSet<Entity> entities_;
+    std::vector<ComponentType> components_;
 };
 
 }  // namespace wheel

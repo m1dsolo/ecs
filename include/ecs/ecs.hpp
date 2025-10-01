@@ -1,27 +1,26 @@
 #pragma once
 
-#include <ecs/component_container.hpp>
 #include <ecs/entity.hpp>
 #include <ecs/entity_generator.hpp>
-#include <ecs/sparse_set.hpp>
+#include <ecs/component_container.hpp>
+#include <ecs/event_container.hpp>
 
 #include <algorithm>
-#include <any>
 #include <functional>
 #include <ranges>
 #include <typeindex>
+#include <unordered_set>
 #include <unordered_map>
 #include <vector>
+#include <memory>
 
 namespace wheel {
 
 using ComponentID = std::type_index;
-using EventID = std::type_index;
 using SystemID = std::type_index;
+using EventID = std::type_index;
 
 class ECS {
-    friend class ComponentContainer;
-
 public:
     ECS() = default;
     ~ECS() = default;
@@ -31,9 +30,6 @@ public:
 
     template <typename... ComponentTypes>
     Entity add_entity(ComponentTypes&&... components);
-
-    template <typename... ComponentTypes>
-    Entity add_entity(Entity entity, ComponentTypes&&... components);
 
     Entity copy_entity(Entity entity);
 
@@ -60,8 +56,6 @@ public:
     template <typename ComponentType>
     void del_component(Entity entity);
 
-    void del_component(Entity entity, ComponentID component_id);
-
     template <typename... ComponentTypes>
     void del_components();
 
@@ -69,37 +63,31 @@ public:
     void del_components(Entity entity);
 
     template <typename... ComponentIDs> requires (std::is_convertible_v<ComponentIDs, ComponentID> && ...)
-    void del_components(Entity entity, ComponentIDs&&... component_ids);
+    void del_components(Entity entity, ComponentIDs&&... cids);
 
     template <typename ComponentType>
     bool has_component(Entity entity) const;
 
-    template <typename ComponentType>
-    bool has_component() const;
-
     template <typename... ComponentTypes>
     bool has_components(Entity entity) const;
 
-    template <typename... ComponentTypes>
-    bool has_components() const;
+    template <typename ComponentType>
+    ComponentType& get_component() const;
 
     template <typename ComponentType>
-    ComponentType& get_component();
-
-    template <typename ComponentType>
-    ComponentType& get_component(Entity entity);
+    ComponentType& get_component(Entity entity) const;
 
     template <typename... ComponentTypes>
-    auto get_components();
+    auto get_components() const;
 
     template <typename... ComponentTypes>
-    auto get_components(Entity entity);
+    auto get_components(Entity entity) const;
 
     template <typename... ComponentTypes>
-    auto get_entity_and_components();
+    auto get_entity_and_components() const;
 
     template <typename SystemType>
-    SystemID get_system_id() {
+    SystemID get_system_id() const {
         return typeid(SystemType);
     }
 
@@ -141,7 +129,7 @@ public:
     bool has_event() const;
 
     template <typename EventType>
-    auto get_events();
+    std::span<const EventType> get_events() const;
 
     void clear();
     void clear_entities();
@@ -152,12 +140,8 @@ private:
     template <typename ComponentType>
     void add_component_(Entity entity, ComponentType&& component);
 
-    std::any& get_component_(ComponentID component_id);
-    std::any& get_component_(Entity entity, ComponentID component_id);
-
-    std::unordered_map<Entity, std::unordered_map<ComponentID, size_t>> entity2components_;
-    std::unordered_map<ComponentID, SparseSet<Entity>> component2entities_;
-    std::unordered_map<ComponentID, ComponentContainer> component2containers_;
+    std::unordered_map<Entity, std::unordered_set<ComponentID>> entity_components_;
+    std::unordered_map<ComponentID, std::unique_ptr<ComponentContainerInterface>> cid2containers_;
 
     struct SystemInfo {
         std::function<void()> func;
@@ -166,29 +150,24 @@ private:
     std::vector<SystemID> systems_;
     std::unordered_map<SystemID, SystemInfo> system_infos_map_;
 
-    std::unordered_map<EventID, std::vector<std::any>> current_frame_events_map_, next_frame_events_map_;
+    std::unordered_map<EventID, std::unique_ptr<EventContainerInterface>> current_events_map_, next_events_map_;
 };
 
 
 template <typename... ComponentTypes>
 Entity ECS::add_entity(ComponentTypes&&... components) {
-    return add_entity(EntityGenerator::generate(), std::forward<ComponentTypes>(components)...);
-}
-
-template <typename... ComponentTypes>
-Entity ECS::add_entity(Entity entity, ComponentTypes&&... components) {
-    EntityGenerator::set_next_entity(std::max(EntityGenerator::next_entity(), entity + 1));
-    entity2components_[entity];
+    auto entity = EntityGenerator::generate();
+    entity_components_[entity];
     add_components(entity, std::forward<ComponentTypes>(components)...);
     return entity;
 }
 
 template <typename... ComponentTypes>
 auto ECS::get_entities() const {
-    return entity2components_ |
+    return entity_components_ |
         std::views::keys |
         std::views::filter([this](Entity entity) {
-            const auto& components = entity2components_.at(entity);
+            const auto& components = entity_components_.at(entity);
             return (components.contains(typeid(ComponentTypes)) && ...);
         });
 }
@@ -225,7 +204,28 @@ void ECS::del_component() {
 
 template <typename ComponentType>
 void ECS::del_component(Entity entity) {
-    return del_component(entity, typeid(ComponentType));
+    ComponentID cid = typeid(ComponentType);
+
+    auto it = entity_components_.find(entity);
+    if (it == entity_components_.end()) {
+        return;
+    }
+    auto& components = it->second;
+    if (!components.contains(cid)) {
+        return;
+    }
+
+    if (auto it = cid2containers_.find(cid); it != cid2containers_.end()) {
+        it->second->remove(entity);
+        // if (it->second->size() == 0) {
+        //     cid2containers_.erase(it);
+        // }
+    }
+
+    components.erase(cid);
+    // if (components.empty()) {
+    //     entity_components_.erase(it);
+    // }
 }
 
 template <typename... ComponentTypes>
@@ -239,42 +239,36 @@ void ECS::del_components(Entity entity) {
 }
 
 template <typename... ComponentIDs> requires (std::is_convertible_v<ComponentIDs, ComponentID> && ...)
-void ECS::del_components(Entity entity, ComponentIDs&&... component_ids) {
-    (del_component(entity, std::forward<ComponentIDs>(component_ids)), ...);
+void ECS::del_components(Entity entity, ComponentIDs&&... cids) {
+    (del_component(entity, std::forward<ComponentIDs>(cids)), ...);
 }
 
 template <typename ComponentType>
 bool ECS::has_component(Entity entity) const {
-    return has_components<ComponentType>(entity);
-}
-
-template <typename ComponentType>
-bool ECS::has_component() const {
-    return has_components<ComponentType>();
+    return entity_components_.count(entity) && entity_components_.at(entity).contains(typeid(ComponentType));
 }
 
 template <typename... ComponentTypes>
 bool ECS::has_components(Entity entity) const {
-    return entity2components_.count(entity) && ((entity2components_.at(entity).contains(typeid(ComponentTypes)) && ...));
-}
-
-template <typename... ComponentTypes>
-bool ECS::has_components() const {
-    return ((component2containers_.count(typeid(ComponentTypes)) && component2containers_.at(typeid(ComponentTypes)).size() > 0) && ...);
+    return (has_component<ComponentTypes>(entity) && ...);
 }
 
 template <typename ComponentType>
-ComponentType& ECS::get_component() {
-    return std::any_cast<ComponentType&>(get_component_(typeid(ComponentType)));
+ComponentType& ECS::get_component() const {
+    ComponentID cid = typeid(ComponentType);
+    auto& container = static_cast<ComponentContainer<ComponentType>&>(*cid2containers_.at(cid));
+    return container.get_first();
 }
 
 template <typename ComponentType>
-ComponentType& ECS::get_component(Entity entity) {
-    return std::any_cast<ComponentType&>(get_component_(entity, typeid(ComponentType)));
+ComponentType& ECS::get_component(Entity entity) const {
+    ComponentID cid = typeid(ComponentType);
+    auto& container = static_cast<ComponentContainer<ComponentType>&>(*cid2containers_.at(cid));
+    return container.get(entity);
 }
 
 template <typename... ComponentTypes>
-auto ECS::get_components() {
+auto ECS::get_components() const {
     auto entities = get_entities<ComponentTypes...>();
     return std::views::zip(
         entities |
@@ -285,20 +279,18 @@ auto ECS::get_components() {
 }
 
 template <typename... ComponentTypes>
-auto ECS::get_components(Entity entity) {
+auto ECS::get_components(Entity entity) const {
     return std::make_tuple(std::ref(get_component<ComponentTypes>(entity))...);
 }
 
 template <typename... ComponentTypes>
-auto ECS::get_entity_and_components() {
+auto ECS::get_entity_and_components() const {
     auto entities = get_entities<ComponentTypes...>();
     return std::views::zip(
         entities,
         entities |
         std::views::transform([&](Entity entity) -> ComponentTypes& {
-            size_t idx = entity2components_.at(entity).at(typeid(ComponentTypes));
-            auto& component = component2containers_.at(typeid(ComponentTypes)).components.at(idx);
-            return std::any_cast<ComponentTypes&>(component);
+            return get_component<ComponentTypes>(entity);
         })
     ...);
 }
@@ -360,39 +352,54 @@ void ECS::resume_systems() {
 
 template <typename EventType>
 void ECS::add_event(EventType&& event) {
-    next_frame_events_map_[typeid(EventType)].emplace_back(std::forward<EventType>(event));
+    EventID eid = typeid(EventType);
+    if (!next_events_map_.count(eid)) {
+        next_events_map_[eid] = std::make_unique<EventContainer<EventType>>();
+    }
+    auto& container = static_cast<EventContainer<EventType>&>(*next_events_map_[eid]);
+    container.events.emplace_back(std::forward<EventType>(event));
 }
 
 template <typename EventType, typename... Args>
 void ECS::emplace_event(Args&&... args) {
-    next_frame_events_map_[typeid(EventType)].emplace_back(EventType(std::forward<Args>(args)...));
+    EventID eid = typeid(EventType);
+    if (!next_events_map_.count(eid)) {
+        next_events_map_[eid] = std::make_unique<EventContainer<EventType>>();
+    }
+    auto& container = static_cast<EventContainer<EventType>&>(*next_events_map_[eid]);
+    container.events.emplace_back(std::forward<Args>(args)...);
 }
 
 template <typename EventType>
 bool ECS::has_event() const {
-    return current_frame_events_map_.count(typeid(EventType));
+    EventID eid = typeid(EventType);
+    return next_events_map_.count(eid) > 0 && next_events_map_.at(eid)->size() > 0;
 }
 
 template <typename EventType>
-auto ECS::get_events() {
-    return current_frame_events_map_[typeid(EventType)] |
-        std::views::transform([](std::any& event) -> EventType& { return std::any_cast<EventType&>(event); });
+std::span<const EventType> ECS::get_events() const {
+    EventID eid = typeid(EventType);
+    if (auto it = current_events_map_.find(eid); it == current_events_map_.end()) {
+        return {};
+    } else {
+        return static_cast<const EventContainer<EventType>&>(*current_events_map_.at(eid)).events;
+    }
 }
 
 template <typename ComponentType>
 void ECS::add_component_(Entity entity, ComponentType&& component) {
-    ComponentID component_id = typeid(ComponentType);
-    if (entity2components_[entity].count(component_id)) {
+    ComponentID cid = typeid(ComponentType);
+    if (entity_components_[entity].count(cid)) {
         return;
     }
 
-    component2entities_[component_id].add(entity);
-    if (!component2containers_.count(component_id)) {
-        component2containers_.emplace(component_id, ComponentContainer(*this, component_id));
+    if (!cid2containers_.count(cid)) {
+        cid2containers_[cid] = std::make_unique<ComponentContainer<ComponentType>>();
     }
-    auto& component_container = component2containers_.at(component_id);
-    component_container.add(component, entity);
-    entity2components_[entity][component_id] = component_container.size() - 1;
+    auto& container = static_cast<ComponentContainer<ComponentType>&>(*cid2containers_[cid]);
+    container.add(entity, std::forward<ComponentType>(component));
+
+    entity_components_[entity].emplace(cid);
 }
 
 }  // namespace wheel

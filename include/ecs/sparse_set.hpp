@@ -14,6 +14,7 @@ public:
     SparseSet() {}
     explicit SparseSet(size_t size) {
         dense_.reserve(size);
+        sparse_.reserve(size);
     }
     ~SparseSet() = default;
 
@@ -22,8 +23,10 @@ public:
         sparse_[val] = dense_.size() - 1;
     }
 
-    void del(const T& val) {
-        if (!sparse_.count(val)) return;
+    void remove(const T& val) {
+        if (!sparse_.count(val)) {
+            return;
+        }
 
         size_t idx = sparse_[val];
         if (val != dense_.back()) {
@@ -38,6 +41,13 @@ public:
         return sparse_.count(val);
     }
 
+    size_t get_index(const T& val) const {
+        if (!sparse_.count(val)) {
+            return -1;
+        }
+        return sparse_.at(val);
+    }
+
     const auto begin() const { return dense_.begin(); }
     const auto end() const { return dense_.end(); }
 
@@ -45,6 +55,8 @@ public:
 
 private:
     std::vector<T> dense_;
+
+    // use unordered_map instead of vector for sparse_ because T may be very large.
     std::unordered_map<T, size_t> sparse_;
 };
 
