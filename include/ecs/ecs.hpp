@@ -33,7 +33,7 @@ public:
 
     Entity copy_entity(Entity entity);
 
-    void del_entity(Entity entity);
+    void remove_entity(Entity entity);
     bool has_entity(Entity entity) const;
 
     template <typename... ComponentTypes>
@@ -51,19 +51,19 @@ public:
     void add_components(Entity entity, ComponentTypes&&... components);
 
     template <typename ComponentType>
-    void del_component();
+    void remove_component();
 
     template <typename ComponentType>
-    void del_component(Entity entity);
+    void remove_component(Entity entity);
 
     template <typename... ComponentTypes>
-    void del_components();
+    void remove_components();
 
     template <typename... ComponentTypes>
-    void del_components(Entity entity);
+    void remove_components(Entity entity);
 
     template <typename... ComponentIDs> requires (std::is_convertible_v<ComponentIDs, ComponentID> && ...)
-    void del_components(Entity entity, ComponentIDs&&... cids);
+    void remove_components(Entity entity, ComponentIDs&&... cids);
 
     template <typename ComponentType>
     bool has_component(Entity entity) const;
@@ -98,10 +98,10 @@ public:
     void add_systems();
 
     template <typename SystemType>
-    void del_system();
+    void remove_system();
 
     template <typename... SystemTypes>
-    void del_systems();
+    void remove_systems();
 
     template <typename SystemType>
     void pause_system();
@@ -196,14 +196,14 @@ void ECS::add_components(Entity entity, ComponentTypes&&... components) {
 }
 
 template <typename ComponentType>
-void ECS::del_component() {
+void ECS::remove_component() {
     for (auto& entity : get_entities<ComponentType>()) {
-        del_component<ComponentType>(entity);
+        remove_component<ComponentType>(entity);
     }
 }
 
 template <typename ComponentType>
-void ECS::del_component(Entity entity) {
+void ECS::remove_component(Entity entity) {
     ComponentID cid = typeid(ComponentType);
 
     auto it = entity_components_.find(entity);
@@ -229,18 +229,18 @@ void ECS::del_component(Entity entity) {
 }
 
 template <typename... ComponentTypes>
-void ECS::del_components() {
-    (del_component<ComponentTypes>(), ...);
+void ECS::remove_components() {
+    (remove_component<ComponentTypes>(), ...);
 }
 
 template <typename... ComponentTypes>
-void ECS::del_components(Entity entity) {
-    (del_component<ComponentTypes>(entity), ...);
+void ECS::remove_components(Entity entity) {
+    (remove_component<ComponentTypes>(entity), ...);
 }
 
 template <typename... ComponentIDs> requires (std::is_convertible_v<ComponentIDs, ComponentID> && ...)
-void ECS::del_components(Entity entity, ComponentIDs&&... cids) {
-    (del_component(entity, std::forward<ComponentIDs>(cids)), ...);
+void ECS::remove_components(Entity entity, ComponentIDs&&... cids) {
+    (remove_component(entity, std::forward<ComponentIDs>(cids)), ...);
 }
 
 template <typename ComponentType>
@@ -311,7 +311,7 @@ void ECS::add_systems() {
 }
 
 template <typename SystemType>
-void ECS::del_system() {
+void ECS::remove_system() {
     SystemID id = typeid(SystemType);
     if (system_infos_map_.count(id)) {
         system_infos_map_.erase(id);
@@ -320,8 +320,8 @@ void ECS::del_system() {
 }
 
 template <typename... SystemTypes>
-void ECS::del_systems() {
-    (del_system<SystemTypes>(), ...);
+void ECS::remove_systems() {
+    (remove_system<SystemTypes>(), ...);
 }
 
 template <typename SystemType>

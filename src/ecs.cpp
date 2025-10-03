@@ -26,7 +26,7 @@ Entity ECS::copy_entity(Entity entity) {
     return new_entity;
 }
 
-void ECS::del_entity(Entity entity) {
+void ECS::remove_entity(Entity entity) {
     if (!has_entity(entity)) {
         return;
     }
