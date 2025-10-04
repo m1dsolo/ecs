@@ -9,8 +9,11 @@ void ECS::update() {
             info.func();
         }
     }
-    std::swap(current_events_map_, next_events_map_);
-    next_events_map_.clear();
+    current_events_map_ = std::move(next_events_map_);
+    for (auto& [entity, cid] : current_entity_events_map_) {
+        remove_component_(entity, cid);
+    }
+    current_entity_events_map_ = std::move(next_entity_events_map_);
 }
 
 Entity ECS::copy_entity(Entity entity) {
@@ -61,6 +64,7 @@ void ECS::clear() {
     clear_systems();
     clear_entities();
     clear_events();
+    clear_entity_events();
 }
 
 void ECS::clear_entities() {
@@ -76,6 +80,34 @@ void ECS::clear_systems() {
 void ECS::clear_events() {
     current_events_map_.clear();
     next_events_map_.clear();
+}
+
+void ECS::clear_entity_events() {
+    current_entity_events_map_.clear();
+    next_entity_events_map_.clear();
+}
+
+void ECS::remove_component_(Entity entity, ComponentID cid) {
+    auto it = entity_components_.find(entity);
+    if (it == entity_components_.end()) {
+        return;
+    }
+    auto& components = it->second;
+    if (!components.contains(cid)) {
+        return;
+    }
+
+    if (auto it = cid2containers_.find(cid); it != cid2containers_.end()) {
+        it->second->remove(entity);
+        // if (it->second->size() == 0) {
+        //     cid2containers_.erase(it);
+        // }
+    }
+
+    components.erase(cid);
+    // if (components.empty()) {
+    //     entity_components_.erase(it);
+    // }
 }
 
 }  // namespace wheel
