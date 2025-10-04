@@ -62,9 +62,6 @@ public:
     template <typename... ComponentTypes>
     void remove_components(Entity entity);
 
-    template <typename... ComponentIDs> requires (std::is_convertible_v<ComponentIDs, ComponentID> && ...)
-    void remove_components(Entity entity, ComponentIDs&&... cids);
-
     template <typename ComponentType>
     bool has_component(Entity entity) const;
 
@@ -131,16 +128,25 @@ public:
     template <typename EventType>
     std::span<const EventType> get_events() const;
 
+    template <typename ComponentType>
+    void add_entity_event(Entity entity, ComponentType&& component);
+
     void clear();
     void clear_entities();
     void clear_systems();
     void clear_events();
+    void clear_entity_events();
 
 private:
     template <typename ComponentType>
     void add_component_(Entity entity, ComponentType&& component);
 
+    void copy_component_(Entity src_entity, Entity dst_entity, ComponentID cid);
+
+    void remove_component_(Entity entity, ComponentID cid);
+
     std::unordered_map<Entity, std::unordered_set<ComponentID>> entity_components_;
+
     std::unordered_map<ComponentID, std::unique_ptr<ComponentContainerInterface>> cid2containers_;
 
     struct SystemInfo {
@@ -151,6 +157,9 @@ private:
     std::unordered_map<SystemID, SystemInfo> system_infos_map_;
 
     std::unordered_map<EventID, std::unique_ptr<EventContainerInterface>> current_events_map_, next_events_map_;
+
+    std::vector<std::function<void()>> delayed_functions_;
+    std::vector<std::pair<wheel::Entity, ComponentID>> current_entity_events_, next_entity_events_;
 };
 
 
@@ -204,28 +213,7 @@ void ECS::remove_component() {
 
 template <typename ComponentType>
 void ECS::remove_component(Entity entity) {
-    ComponentID cid = typeid(ComponentType);
-
-    auto it = entity_components_.find(entity);
-    if (it == entity_components_.end()) {
-        return;
-    }
-    auto& components = it->second;
-    if (!components.contains(cid)) {
-        return;
-    }
-
-    if (auto it = cid2containers_.find(cid); it != cid2containers_.end()) {
-        it->second->remove(entity);
-        // if (it->second->size() == 0) {
-        //     cid2containers_.erase(it);
-        // }
-    }
-
-    components.erase(cid);
-    // if (components.empty()) {
-    //     entity_components_.erase(it);
-    // }
+    remove_component_(entity, typeid(ComponentType));
 }
 
 template <typename... ComponentTypes>
@@ -236,11 +224,6 @@ void ECS::remove_components() {
 template <typename... ComponentTypes>
 void ECS::remove_components(Entity entity) {
     (remove_component<ComponentTypes>(entity), ...);
-}
-
-template <typename... ComponentIDs> requires (std::is_convertible_v<ComponentIDs, ComponentID> && ...)
-void ECS::remove_components(Entity entity, ComponentIDs&&... cids) {
-    (remove_component(entity, std::forward<ComponentIDs>(cids)), ...);
 }
 
 template <typename ComponentType>
@@ -384,6 +367,16 @@ std::span<const EventType> ECS::get_events() const {
     } else {
         return static_cast<const EventContainer<EventType>&>(*current_events_map_.at(eid)).events;
     }
+}
+
+template <typename ComponentType>
+void ECS::add_entity_event(Entity entity, ComponentType&& component) {
+    next_entity_events_.emplace_back(entity, typeid(ComponentType));
+    delayed_functions_.emplace_back([this, entity, component = std::forward<ComponentType>(component)]() mutable {
+        if (has_entity(entity)) {
+            add_component_(entity, std::forward<ComponentType>(component));
+        }
+    });
 }
 
 template <typename ComponentType>
