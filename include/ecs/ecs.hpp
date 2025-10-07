@@ -3,6 +3,7 @@
 #include <ecs/entity.hpp>
 #include <ecs/entity_generator.hpp>
 #include <ecs/component_container.hpp>
+#include <ecs/resource.hpp>
 #include <ecs/event_container.hpp>
 
 #include <algorithm>
@@ -18,6 +19,7 @@ namespace wheel {
 
 using ComponentID = std::type_index;
 using SystemID = std::type_index;
+using ResourceID = std::type_index;
 using EventID = std::type_index;
 
 class ECS {
@@ -116,6 +118,18 @@ public:
     template <typename... SystemType>
     void resume_systems();
 
+    template <typename ResourceType>
+    void add_resource(ResourceType&& resource);
+
+    template <typename ResourceType>
+    ResourceType& get_resource() const;
+
+    template <typename ResourceType>
+    bool has_resource() const;
+
+    template <typename ResourceType>
+    void remove_resource();
+
     template <typename EventType>
     void add_event(EventType&& event);
     
@@ -155,6 +169,8 @@ private:
     };
     std::vector<SystemID> systems_;
     std::unordered_map<SystemID, SystemInfo> system_infos_map_;
+
+    std::unordered_map<ResourceID, std::unique_ptr<ResourceInterface>> resources_;
 
     std::unordered_map<EventID, std::unique_ptr<EventContainerInterface>> current_events_map_, next_events_map_;
 
@@ -331,6 +347,35 @@ void ECS::resume_system() {
 template <typename... SystemType>
 void ECS::resume_systems() {
     (resume_system<SystemType>(), ...);
+}
+
+template <typename ResourceType>
+void ECS::add_resource(ResourceType&& resource) {
+    ResourceID rid = typeid(ResourceType);
+    if (!resources_.count(rid)) {
+        auto r = std::make_unique<Resource<ResourceType>>(
+            std::forward<ResourceType>(resource)
+        );
+        resources_.emplace(rid, std::move(r));
+    }
+}
+
+template <typename ResourceType>
+ResourceType& ECS::get_resource() const {
+    ResourceID rid = typeid(ResourceType);
+    return static_cast<Resource<ResourceType>&>(*resources_.at(rid)).resource;
+}
+
+template <typename ResourceType>
+bool ECS::has_resource() const {
+    ResourceID rid = typeid(ResourceType);
+    return resources_.count(rid) > 0;
+}
+
+template <typename ResourceType>
+void ECS::remove_resource() {
+    ResourceID rid = typeid(ResourceType);
+    resources_.erase(rid);
 }
 
 template <typename EventType>
