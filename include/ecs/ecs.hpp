@@ -179,7 +179,6 @@ private:
     std::vector<std::pair<wheel::Entity, ComponentID>> current_entity_events_, next_entity_events_;
 };
 
-
 template <typename... ComponentTypes>
 Entity ECS::add_entity(ComponentTypes&&... components) {
     auto entity = EntityGenerator::generate();
@@ -402,7 +401,7 @@ void ECS::emplace_event(Args&&... args) {
 template <typename EventType>
 bool ECS::has_event() const {
     EventID eid = typeid(EventType);
-    return next_events_map_.count(eid) > 0 && next_events_map_.at(eid)->size() > 0;
+    return current_events_map_.count(eid) > 0 && current_events_map_.at(eid)->size() > 0;
 }
 
 template <typename EventType>
