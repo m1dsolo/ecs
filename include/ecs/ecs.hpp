@@ -36,6 +36,7 @@ public:
     Entity copy_entity(Entity entity);
 
     void remove_entity(Entity entity);
+
     bool has_entity(Entity entity) const;
 
     template <typename... ComponentTypes>
@@ -298,7 +299,7 @@ template <typename SystemType>
 void ECS::add_system() {
     SystemID id = typeid(SystemType);
     system_infos_map_.emplace(id, SystemInfo{
-        .func = [system = SystemType()]() mutable { system(); },
+        .func = [this, system = SystemType()]() mutable { system(*this); },
         .active = true
     });
     systems_.emplace_back(id);
