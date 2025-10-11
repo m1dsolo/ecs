@@ -3,6 +3,9 @@
 namespace wheel {
 
 void ECS::update() {
+    for (auto [entity, cid] : current_entity_events_) {
+        remove_component_(entity, cid);
+    }
     current_events_map_ = std::move(next_events_map_);
     current_entity_events_ = std::move(next_entity_events_);
     for (auto& func : delayed_functions_) {
@@ -15,10 +18,6 @@ void ECS::update() {
         if (info.active) {
             info.func();
         }
-    }
-    
-    for (auto [entity, cid] : current_entity_events_) {
-        remove_component_(entity, cid);
     }
 }
 
