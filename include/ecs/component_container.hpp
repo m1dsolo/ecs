@@ -6,9 +6,9 @@
 namespace wheel {
 
 // type erasure for component container
-class ComponentContainerInterface {
+class IComponentContainer {
 public:
-    virtual ~ComponentContainerInterface() = default;
+    virtual ~IComponentContainer() = default;
 
     virtual void remove(Entity entity) = 0;
 
@@ -20,7 +20,7 @@ public:
 };
 
 template <typename ComponentType>
-class ComponentContainer : public ComponentContainerInterface {
+class ComponentContainer : public IComponentContainer {
 public:
     void remove(Entity entity) override {
         if (!entities_.has(entity)) return;

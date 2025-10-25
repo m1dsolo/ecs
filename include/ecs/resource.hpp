@@ -7,13 +7,13 @@
 namespace wheel {
 
 // type erasure for resource
-class ResourceInterface {
+class IResource {
 public:
-    virtual ~ResourceInterface() = default;
+    virtual ~IResource() = default;
 };
 
 template <typename ResourceType>
-class Resource : public ResourceInterface {
+class Resource : public IResource {
 public:
     ResourceType resource;
 

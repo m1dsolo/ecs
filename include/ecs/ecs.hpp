@@ -162,7 +162,7 @@ private:
 
     std::unordered_map<Entity, std::unordered_set<ComponentID>> entity_components_;
 
-    std::unordered_map<ComponentID, std::unique_ptr<ComponentContainerInterface>> cid2containers_;
+    std::unordered_map<ComponentID, std::unique_ptr<IComponentContainer>> cid2containers_;
 
     struct SystemInfo {
         std::function<void()> func;
@@ -171,9 +171,9 @@ private:
     std::vector<SystemID> systems_;
     std::unordered_map<SystemID, SystemInfo> system_infos_map_;
 
-    std::unordered_map<ResourceID, std::unique_ptr<ResourceInterface>> resources_;
+    std::unordered_map<ResourceID, std::unique_ptr<IResource>> resources_;
 
-    std::unordered_map<EventID, std::unique_ptr<EventContainerInterface>> current_events_map_, next_events_map_;
+    std::unordered_map<EventID, std::unique_ptr<IEventContainer>> current_events_map_, next_events_map_;
 
     std::vector<std::function<void()>> delayed_functions_;
     std::vector<std::pair<wheel::Entity, ComponentID>> current_entity_events_, next_entity_events_;

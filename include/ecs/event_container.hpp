@@ -7,15 +7,15 @@
 namespace wheel {
 
 // type erasure for event container
-class EventContainerInterface {
+class IEventContainer {
 public:
-    virtual ~EventContainerInterface() = default;
+    virtual ~IEventContainer() = default;
 
     virtual size_t size() const = 0;
 };
 
 template <typename EventType>
-class EventContainer : public EventContainerInterface {
+class EventContainer : public IEventContainer {
 public:
     size_t size() const override {
         return events.size();
