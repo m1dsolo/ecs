@@ -432,9 +432,9 @@ void ECS::add_component_(Entity entity, ComponentType&& component) {
     }
 
     if (!cid2containers_.count(cid)) {
-        cid2containers_[cid] = std::make_unique<ComponentContainer<ComponentType>>();
+        cid2containers_[cid] = std::make_unique<ComponentContainer<std::decay_t<ComponentType>>>();
     }
-    auto& container = static_cast<ComponentContainer<ComponentType>&>(*cid2containers_[cid]);
+    auto& container = static_cast<ComponentContainer<std::decay_t<ComponentType>>&>(*cid2containers_[cid]);
     container.add(entity, std::forward<ComponentType>(component));
 
     entity_components_[entity].emplace(cid);
